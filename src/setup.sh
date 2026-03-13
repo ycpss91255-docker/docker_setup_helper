@@ -102,9 +102,10 @@ detect_gpu() {
 # ════════════════════════════════════════════════════════════════════
 # detect_image_name
 #
-# Scans path components from right to left.
-# Priority: docker_<name> → <name>_ws → last directory component
-# Compatible with get_param.sh naming convention.
+# Detection priority:
+#   1. Scan entire path (right to left) for *_ws → use prefix
+#   2. Check last directory only for docker_* → strip prefix
+#   3. Fallback to "unknown"
 #
 # Usage: detect_image_name <outvar> <path>
 # ════════════════════════════════════════════════════════════════════
@@ -113,25 +114,37 @@ detect_image_name() {
     local _path="${1:?"${FUNCNAME[0]}: missing path"}"
 
     local -a _parts=()
-    local _found=""
+    local _found="" _last=""
 
     IFS='/' read -ra _parts <<< "${_path}"
 
+    # 1. Scan entire path for *_ws (right to left)
     local i _part
     for (( i=${#_parts[@]}-1; i>=0; i-- )); do
         _part="${_parts[i]}"
         [[ -z "${_part}" ]] && continue
-        if [[ "${_part}" == docker_* ]]; then
-            _found="${_part#docker_}"
-        elif [[ "${_part}" == *_ws ]]; then
+        if [[ "${_part}" == *_ws ]]; then
             _found="${_part%_ws}"
-        else
-            _found="${_part}"
+            break
         fi
-        break
     done
 
-    _outvar="${_found,,}"
+    # 2. Check last directory for docker_* prefix
+    if [[ -z "${_found}" ]]; then
+        for (( i=${#_parts[@]}-1; i>=0; i-- )); do
+            _part="${_parts[i]}"
+            [[ -z "${_part}" ]] && continue
+            _last="${_part}"
+            break
+        done
+        if [[ "${_last}" == docker_* ]]; then
+            _found="${_last#docker_}"
+        fi
+    fi
+
+    # 3. Fallback
+    _outvar="${_found:-unknown}"
+    _outvar="${_outvar,,}"
 }
 
 # ════════════════════════════════════════════════════════════════════
